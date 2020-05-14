@@ -1,0 +1,79 @@
+---
+name: "Sahil Desai"
+title: "Kaggle Log"
+output: html_notebook
+---
+
+
+```{r}
+#devtools::install_github("laresbernardo/lares")
+#install.packages("devtools")
+#install.packages("imputeTS")
+library(devtools)
+library(lares)
+library(dplyr)
+library(imputeTS)
+
+#these are the packages I used for the linear regression models
+kaggle = read.csv('analysisData.csv')
+
+```
+
+
+```{r}
+str(kaggle)
+corr_var(kaggle, price, top = 15) # to look at the top correlated variables plotted against price
+kmodel1 <- lm(price ~ bedrooms * accommodates + neighbourhood_group_cleansed + guests_included + beds, data = kaggle)
+summary(kmodel1)
+#RMSE = 81
+```
+
+```{r}
+kmodel2 <- lm(log(price + 1) ~ bedrooms + accommodates + neighbourhood_group_cleansed + guests_included, data = kaggle)
+exp(kmodel2)
+#RMSE was over 169 in kaggle submission. This was before we learned Log in class. So I did not know I had to use exp for predictions
+```
+
+```{r}
+kmodel3 <- lm(price ~ bedrooms * accommodates * neighbourhood_group_cleansed + guests_included + factor(room_type) + bathrooms + review_scores_rating, data = kaggle)           
+summary(kmodel3)
+#RMSE is around 75. I added room_type and converted to factor which helped
+```
+
+
+```{r}
+#I wanted to add beds and cleaningfee, along with security deposit. These variables had missing values, so i imputed them differently for each. This included imputing the data along with the scoring data.
+kaggle$beds <- na.mean(kaggle$beds, option = "mode") #replace missing values with value that appears most 
+kaggle$cleaning_fee <- na.mean(kaggle$cleaning_fee, option = "mean") #replace missing values with mean
+kaggle$security_deposit[is.na(kaggle$security_deposit)] <- 0 #replace missing values with 0
+kmodel4 <- lm(price ~ bedrooms * accommodates * neighbourhood_group_cleansed + guests_included + factor(room_type) + bathrooms + review_scores_rating + cleaning_fee + beds + security_deposit, data = kaggle)
+summary(kmodel4)
+#RMSE was around 72. Little improvement, probably too many variables now. But removing any of them just hurt the model
+scoringData = read.csv('scoringData.csv')
+scoringData$cleaning_fee <- na.mean(scoringData$cleaning_fee, option = "mean")
+scoringData$beds <- na.mean(scoringData$beds, option = "mode")
+scoringData$security_deposit[is.na(scoringData$security_deposit)] <- 0
+pred = predict(kmodel4,newdata=scoringData)
+submissionFile = data.frame(id = scoringData$id, price = pred)
+write.csv(submissionFile, 'sample_submission.csv',row.names = F)
+```
+
+```{r}
+#this next and final model is a forest. If I had more time to tune the model I would have gotten a better RMSE. Here it is.
+
+library(ranger)
+set.seed(620)
+split = sample(1:nrow(kaggle),nrow(kaggle)*0.7)
+train = kaggle[split,]
+test = kaggle[-split,]
+forest_ranger = ranger(price ~ room_type + cleaning_fee + bedrooms + neighbourhood_group_cleansed + accommodates + guests_included + beds + bathrooms + security_deposit + minimum_nights + review_scores_rating, data=kaggle, num.trees = 1000)
+pred = predict(forest_ranger, data =test,num.trees = 1000)
+rmse_forest_ranger = sqrt(mean((pred$predictions-test$price)^2)); rmse_forest_ranger
+#this gave RMSE of around 66 in kaggle
+
+pred = predict(forest_ranger, data = scoringData)
+submissionFile = data.frame(id = scoringData$id, price = pred$predictions)
+write.csv(submissionFile, 'sample_submission.csv',row.names = F)
+```
+
+
