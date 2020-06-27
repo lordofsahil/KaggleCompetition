@@ -1,2 +1,2 @@
 # KaggleCompetition
-Submissions for Kaggle competition (predicting AirBnB price)
+Creating predictive models for Airbnb prices in R
